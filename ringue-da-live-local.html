@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ringue da Live</title>
+<style>
+:root{--bg:#f3f1fb;--pn:#ffffff;--tx:#1b1733;--bd:#d8d2f0;--ac:#7c5cff;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d0b1a;--pn:#1b1733;--tx:#f2f0ff;--bd:#352f5c}}
+:root[data-theme="dark"]{--bg:#0d0b1a;--pn:#1b1733;--tx:#f2f0ff;--bd:#352f5c}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;height:100%;display:flex;flex-direction:column;background:var(--bg);color:var(--tx);font:14px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+#c{flex:1;min-height:0;width:100%;display:block}
+#panel{background:var(--pn);border-top:1px solid var(--bd);padding:8px;display:flex;flex-direction:column;gap:6px}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+button,input[type=text]{font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:6px 9px}
+input[type=text]{flex:1;min-width:0}
+button{cursor:pointer}
+button:active{background:var(--ac);color:#fff}
+#st{flex:1;font-size:12px;opacity:.7}
+#show{position:fixed;right:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);z-index:5;opacity:.6}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="panel">
+  <div class="row"><input type="text" id="live" placeholder="@usuario ou link da live" aria-label="Usuário ou link da live"><button id="go">Conectar</button></div>
+  <div class="row"><input type="text" id="key" placeholder="Chave Euler Stream (opcional)" aria-label="Chave da API"></div>
+  <div class="row"><input type="text" id="u" value="Viewer1" maxlength="16" aria-label="Nome do espectador"><span id="st">Modo teste</span><button id="hd">Ocultar</button></div>
+  <div class="row" id="gifts"></div>
+  <div class="row"><input type="text" id="m" placeholder="Comentário do chat" aria-label="Comentário"><button id="sm">Enviar</button></div>
+  <div class="row"><button data-c="força">💪 FORÇA</button><button data-c="cura">💚 CURA</button><label><input type="checkbox" id="bots"> Bots</label></div>
+</div>
+<button id="show" class="hide" aria-label="Mostrar painel">⚙️</button>
+<script>
+const $=s=>document.querySelector(s),R=(a,b)=>a+Math.random()*(b-a),P=a=>a[Math.floor(Math.random()*a.length)];
+const cv=$("#c"),ctx=cv.getContext("2d");
+let W=0,H=0,RG={t:0,b:1,bw:1,fw:1};
+const ring=()=>({t:H*.30,b:H*.86,bw:W*.60,fw:W*.94});
+function rs(){const d=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;cv.width=W*d;cv.height=H*d;ctx.setTransform(d,0,0,d,0,0);RG=ring()}
+new ResizeObserver(rs).observe(cv);
+
+const GL=[["Rosa","🌹",1],["Coração","❤️",5],["Rosquinha","🍩",30],["Leão","🦁",500],["Universo","🌌",1000]];
+const EM={rose:"🌹",heart:"❤️",doughnut:"🍩",donut:"🍩",lion:"🦁",universe:"🌌"};
+GL.forEach(g=>EM[g[0].toLowerCase()]=g[1]);
+const F=[],Q=[],FX=[],FEED=[],SC={};
+let peak=1,banner=null;const MAX=18;
+const tier=d=>d>=500?3:d>=30?2:d>=5?1:0;
+const log=t=>{FEED.unshift({t,a:0});if(FEED.length>5)FEED.pop()};
+const pts=(n,p)=>SC[n]=(SC[n]||0)+p;
+const alive=()=>F.filter(f=>!f.dead);
+const sz=f=>f.s*(.75+.6*Math.min(1,Math.max(0,(f.y-RG.t)/(RG.b-RG.t))));
+
+function spawn(n,e,d){
+  const T=tier(d),hp=[70,110,180,320][T];
+  F.push({name:n,emoji:e,tier:T,hp,max:hp,dmg:[6,9,13,20][T],s:[.8,.95,1.1,1.35][T],x:R(W*.3,W*.7),y:R(RG.t+30,RG.b-20),z:300,vz:0,cd:1,atk:0,hit:0,rage:0,healCd:0,dead:0,bub:null,t:R(0,9),hue:R(0,360),dir:1,walk:0});
+  log(e+" "+n+" entrou na luta!");
+}
+function onGift(u,g,d,c){
+  const e=EM[String(g).toLowerCase()]||"🎁";
+  for(let i=0;i<Math.min(c||1,4);i++){alive().length>=MAX?Q.push([u,e,d]):spawn(u,e,d)}
+}
+function onComment(u,text){
+  const t=String(text).trim();if(!t)return;
+  log("💬 "+u.slice(0,10)+": "+t.slice(0,22));
+  const mine=alive().filter(f=>f.name===u),l=t.toLowerCase();
+  mine.forEach(f=>{
+    f.bub={text:t.slice(0,24),t:3};
+    if(/for[çc]a/.test(l)&&f.rage<=0){f.rage=6;FX.push({x:f.x,y:f.y-80*sz(f),txt:"💪 FORÇA!",c:"#ff6b6b",t:1.2})}
+    else if(/cura/.test(l)&&f.healCd<=0){f.hp=Math.min(f.max,f.hp+f.max*.25);f.healCd=15;FX.push({x:f.x,y:f.y-80*sz(f),txt:"💚 +HP",c:"#4cd964",t:1.2})}
+  });
+}
+window.onGift=onGift;window.onComment=onComment;
+
+function strike(a,b){
+  a.cd=R(.55,.9)/(a.rage>0?1.6:1);a.atk=.22;
+  const crit=Math.random()<.12;
+  let dmg=Math.round(a.dmg*R(.8,1.25)*(a.rage>0?2:1));if(crit)dmg=Math.round(dmg*1.8);
+  b.hp-=dmg;b.hit=.15;
+  const l=Math.hypot(b.x-a.x,b.y-a.y)||1;b.x+=(b.x-a.x)/l*10;b.y+=(b.y-a.y)/l*6;
+  FX.push({x:b.x,y:b.y-70*sz(b),txt:(crit?"💥":"")+dmg,c:crit?"#ffd23f":"#fff",t:.8});
+  if(b.hp<=0){b.hp=0;b.dead=.001;a.kills=(a.kills||0)+1;pts(a.name,1);log("🥊 "+a.name+" nocauteou "+b.name)}
+}
+function update(dt){
+  const al=alive();peak=Math.max(peak,al.length);
+  for(const f of F){
+    if(f.dead){f.dead+=dt;continue}
+    f.t+=dt;f.cd-=dt;f.atk=Math.max(0,f.atk-dt);f.hit=Math.max(0,f.hit-dt);f.rage=Math.max(0,f.rage-dt);f.healCd=Math.max(0,f.healCd-dt);
+    if(f.bub){f.bub.t-=dt;if(f.bub.t<=0)f.bub=null}
+    if(f.z>0){f.vz+=900*dt;f.z-=f.vz*dt;if(f.z<=0){f.z=0;f.vz=0}continue}
+    let tg=null,bd=1e9;
+    for(const o of al){if(o===f||o.dead)continue;const d=Math.hypot(o.x-f.x,(o.y-f.y)*1.8);if(d<bd){bd=d;tg=o}}
+    const s=sz(f),reach=38*s,sp=(55+(f.rage>0?35:0))*(.8+.2*f.s);
+    f.walk=0;
+    if(tg){
+      const dx=tg.x-f.x,dy=tg.y-f.y;f.dir=dx>=0?1:-1;
+      if(bd>reach*.9){const l=Math.hypot(dx,dy)||1;f.x+=dx/l*sp*dt;f.y+=dy/l*sp*dt;f.walk=1}
+      if(bd<=reach&&f.cd<=0&&tg.z<=0)strike(f,tg);
+    }
+  }
+  for(const a of al)for(const b of al){
+    if(a===b||a.dead||b.dead||a.z>0||b.z>0)continue;
+    const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy*1.8),m=16*sz(a);
+    if(d<m&&d>.01){a.x-=dx/d*30*dt;a.y-=dy/d*18*dt}
+  }
+  for(const f of F){
+    f.y=Math.min(RG.b-8,Math.max(RG.t+20,f.y));
+    const v=(f.y-RG.t)/(RG.b-RG.t),h=(RG.bw+(RG.fw-RG.bw)*v)/2-16;
+    f.x=Math.min(W/2+h,Math.max(W/2-h,f.x));
+  }
+  const a2=alive();
+  if(a2.length===1&&peak>=2){const w=a2[0];pts(w.name,3);banner={t:"🏆 "+w.name+" venceu!",a:0};log("🏆 "+w.name+" venceu o round");w.hp=w.max;peak=1}
+  if(a2.length===0)peak=1;
+  if(banner){banner.a+=dt;if(banner.a>3.5)banner=null}
+  if(Q.length&&a2.length<MAX){const q=Q.shift();spawn(q[0],q[1],q[2])}
+  for(let i=F.length;i--;)if(F[i].dead>1.2)F.splice(i,1);
+  FX.forEach(x=>{x.t-=dt;x.y-=32*dt});
+  for(let i=FX.length;i--;)if(FX[i].t<=0)FX.splice(i,1);
+  FEED.forEach(f=>f.a+=dt);
+}
+
+function ropes(front){
+  const r=RG,BL=[W/2-r.bw/2,r.t],BR=[W/2+r.bw/2,r.t],FL=[W/2-r.fw/2,r.b],FR=[W/2+r.fw/2,r.b],hb=H*.1,hf=H*.17,cols=["#ff4d6d","#f5f5f5","#4dabff"];
+  ctx.lineWidth=3;ctx.lineCap="round";
+  for(let k=1;k<=3;k++){
+    const a=k/3.4;ctx.strokeStyle=cols[k-1];ctx.beginPath();
+    if(!front){ctx.moveTo(FL[0],FL[1]-hf*a);ctx.lineTo(BL[0],BL[1]-hb*a);ctx.lineTo(BR[0],BR[1]-hb*a);ctx.lineTo(FR[0],FR[1]-hf*a)}
+    else{ctx.moveTo(FL[0],FL[1]-hf*a);ctx.lineTo(FR[0],FR[1]-hf*a)}
+    ctx.stroke();
+  }
+  ctx.strokeStyle="#b9b3d6";ctx.lineWidth=6;
+  (front?[[FL,hf],[FR,hf]]:[[BL,hb],[BR,hb]]).forEach(([p,h])=>{ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(p[0],p[1]-h);ctx.stroke()});
+}
+function line(a,b,c,d){ctx.beginPath();ctx.moveTo(a,b);ctx.lineTo(c,d);ctx.stroke()}
+function body(f){
+  const s=sz(f),X=f.x,Y=f.y-f.z;
+  ctx.save();
+  ctx.fillStyle="rgba(0,0,0,.35)";ctx.beginPath();ctx.ellipse(f.x,f.y,16*s,5*s,0,0,7);ctx.fill();
+  if(f.dead){ctx.globalAlpha=Math.max(0,1-f.dead/1.2)}
+  const Yd=f.dead?Y-f.dead*30:Y,col=f.hit>0?"#fff":"hsl("+f.hue+",80%,62%)";
+  ctx.strokeStyle=col;ctx.lineWidth=5*s;ctx.lineCap="round";
+  const sw=f.walk?Math.sin(f.t*12)*9*s:0,hip=Yd-26*s,sh=Yd-50*s;
+  line(X-4*s,hip,X-5*s+sw,Yd);line(X+4*s,hip,X+5*s-sw,Yd);
+  line(X,hip,X,sh);
+  const ext=f.atk>0?Math.sin((1-f.atk/.22)*Math.PI)*26*s:0,hx=X+f.dir*(10*s+ext),hy=sh+10*s-ext*.15;
+  line(X,sh+4*s,hx,hy);
+  line(X,sh+4*s,X-f.dir*8*s,sh+14*s+Math.sin(f.t*6)*2*s);
+  ctx.fillStyle="#ff4040";ctx.beginPath();ctx.arc(hx,hy,5.5*s,0,7);ctx.fill();
+  ctx.fillStyle=f.hit>0?"#fff":"#ffe0bd";ctx.beginPath();ctx.arc(X,sh-11*s,11*s,0,7);ctx.fill();
+  ctx.lineWidth=2*s;ctx.strokeStyle=col;ctx.stroke();
+  ctx.fillStyle="#222";ctx.fillRect(X+f.dir*4*s-1.5*s,sh-13*s,3*s,3*s);
+  if(f.rage>0){ctx.strokeStyle="rgba(255,70,70,.85)";ctx.lineWidth=2;ctx.beginPath();ctx.arc(X,sh+10*s,34*s,0,7);ctx.stroke()}
+  if(f.tier===3){ctx.font=18*s+"px serif";ctx.textAlign="center";ctx.textBaseline="bottom";ctx.fillText("👑",X,sh-20*s)}
+  ctx.restore();
+}
+function tag(f){
+  if(f.dead)return;
+  const s=sz(f),X=f.x,top=f.y-f.z-(80+(f.tier===3?12:0))*s,w=46,p=f.hp/f.max;
+  ctx.fillStyle="rgba(0,0,0,.6)";ctx.fillRect(X-w/2,top-6,w,5);
+  ctx.fillStyle=p>.5?"#4cd964":p>.25?"#ffcc00":"#ff3b30";ctx.fillRect(X-w/2,top-6,w*p,5);
+  ctx.font="bold 11px system-ui,sans-serif";ctx.textAlign="center";ctx.textBaseline="bottom";
+  const t=f.emoji+" "+f.name.slice(0,12);ctx.lineWidth=3;ctx.strokeStyle="#000";ctx.strokeText(t,X,top-8);ctx.fillStyle="#fff";ctx.fillText(t,X,top-8);
+  if(f.bub){
+    ctx.font="12px system-ui,sans-serif";const bt=f.bub.text,tw=ctx.measureText(bt).width+12,by=top-26;
+    ctx.fillStyle="#fff";ctx.beginPath();ctx.roundRect(X-tw/2,by-18,tw,18,8);ctx.fill();
+    ctx.fillStyle="#111";ctx.textBaseline="middle";ctx.fillText(bt,X,by-9);
+  }
+}
+function hud(){
+  ctx.textBaseline="top";ctx.textAlign="left";
+  ctx.font="bold 17px system-ui,sans-serif";ctx.fillStyle="#fff";ctx.fillText("🥊 RINGUE DA LIVE",10,10);
+  ctx.font="12px system-ui,sans-serif";ctx.fillStyle="#cfc8ff";ctx.fillText("🎁 presente = lutador",10,34);ctx.fillText("💬 comente FORÇA ou CURA",10,50);
+  ctx.textAlign="right";ctx.font="bold 12px system-ui,sans-serif";ctx.fillStyle="#ffd23f";ctx.fillText("🏆 Ranking",W-10,10);
+  ctx.font="12px system-ui,sans-serif";ctx.fillStyle="#fff";
+  Object.entries(SC).sort((a,b)=>b[1]-a[1]).slice(0,3).forEach(([n,p],i)=>ctx.fillText(["🥇","🥈","🥉"][i]+" "+n.slice(0,10)+" "+p,W-10,27+i*15));
+  ctx.fillStyle="#9fe8ff";ctx.fillText("👥 "+alive().length+" na arena",W-10,74);
+  ctx.textAlign="left";ctx.textBaseline="bottom";
+  FEED.slice(0,4).forEach((f,i)=>{ctx.globalAlpha=Math.max(0,1-f.a/9);ctx.fillStyle="#fff";ctx.fillText(f.t,10,H-8-i*15)});
+  ctx.globalAlpha=1;
+  ctx.textAlign="center";ctx.textBaseline="middle";
+  if(!alive().length&&!banner){ctx.font="bold 18px system-ui,sans-serif";ctx.fillStyle="#fff";ctx.fillText("Mande um presente 🎁",W/2,H*.55);ctx.font="13px system-ui,sans-serif";ctx.fillStyle="#cfc8ff";ctx.fillText("para colocar um lutador no ringue",W/2,H*.55+24)}
+  if(banner){ctx.font="bold 26px system-ui,sans-serif";ctx.lineWidth=5;ctx.strokeStyle="#000";ctx.strokeText(banner.t,W/2,H*.2);ctx.fillStyle="#ffd23f";ctx.fillText(banner.t,W/2,H*.2)}
+}
+function draw(){
+  const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,"#241052");g.addColorStop(1,"#07050f");ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  const r=RG,fg=ctx.createLinearGradient(0,r.t,0,r.b);fg.addColorStop(0,"#4a3a96");fg.addColorStop(1,"#2d2266");
+  ctx.fillStyle=fg;ctx.beginPath();ctx.moveTo(W/2-r.bw/2,r.t);ctx.lineTo(W/2+r.bw/2,r.t);ctx.lineTo(W/2+r.fw/2,r.b);ctx.lineTo(W/2-r.fw/2,r.b);ctx.closePath();ctx.fill();
+  ctx.strokeStyle="rgba(255,255,255,.18)";ctx.lineWidth=2;ctx.stroke();
+  ropes(false);
+  const order=[...F].sort((a,b)=>a.y-b.y);
+  order.forEach(body);
+  ropes(true);
+  order.forEach(tag);
+  ctx.textAlign="center";ctx.textBaseline="middle";ctx.font="bold 15px system-ui,sans-serif";
+  FX.forEach(x=>{ctx.globalAlpha=Math.min(1,x.t*2);ctx.lineWidth=3;ctx.strokeStyle="#000";ctx.strokeText(x.txt,x.x,x.y);ctx.fillStyle=x.c;ctx.fillText(x.txt,x.x,x.y)});
+  ctx.globalAlpha=1;
+  hud();
+}
+let last=performance.now();
+function loop(n){const dt=Math.min(.05,(n-last)/1e3);last=n;if(W){update(dt);draw()}requestAnimationFrame(loop)}
+rs();requestAnimationFrame(loop);
+
+/* painel de teste */
+const user=()=>($("#u").value.trim()||"Viewer");
+GL.forEach(([n,e,d])=>{const b=document.createElement("button");b.textContent=e+" "+d;b.title=n+" ("+d+" diamantes)";b.onclick=()=>onGift(user(),n,d,1);$("#gifts").appendChild(b)});
+const send=()=>{onComment(user(),$("#m").value);$("#m").value=""};
+$("#sm").onclick=send;$("#m").onkeydown=e=>{if(e.key==="Enter")send()};
+document.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>onComment(user(),b.dataset.c));
+$("#hd").onclick=()=>{$("#panel").classList.add("hide");$("#show").classList.remove("hide")};
+$("#show").onclick=()=>{$("#panel").classList.remove("hide");$("#show").classList.add("hide")};
+const NM=["Ana","Bruno","Carla","Dudu","Gabi","Léo","Mari","Zé","Duda","Téo","Lu","Rafa"];
+setInterval(()=>{
+  if(!$("#bots").checked)return;
+  const al=alive();
+  if(al.length&&Math.random()<.4)onComment(P(al).name,P(["força","cura","bora!","kkk"]));
+  else{const g=GL[Math.random()<.7?Math.floor(R(0,2)):Math.floor(R(0,5))];onGift(P(NM),g[0],g[2],1)}
+},2000);
+
+/* ligação com a live real: serviço Euler Stream (terceiros), por @usuario ou link */
+let ws,want=false,nEv=0;
+const st=t=>$("#st").textContent=t;
+const parseId=s=>{s=String(s).trim();const m=s.match(/@([A-Za-z0-9._]+)/);return (m?m[1]:s).replace(/[^A-Za-z0-9._]/g,"")};
+const streak={};
+function gift(n,g,d,c){
+  const k=n+"|"+g,prev=streak[k]||0,add=c>prev?c-prev:c;
+  streak[k]=c;setTimeout(()=>{if(streak[k]===c)delete streak[k]},4000);
+  onGift(n,g,d,add);
+}
+function handle(m){
+  nEv++;
+  const t=String(m.type||m.event||m.method||"").toLowerCase(),d=m.data||m,u=d.user||m.user||{},
+    n=u.nickname||u.uniqueId||d.nickname||d.uniqueId||"Viewer";
+  if(t.includes("gift")){const g=d.gift||d;gift(n,g.name||g.giftName||"",g.diamondCount||g.diamond_count||1,d.repeatCount||g.repeatCount||1)}
+  else if(t.includes("chat")||t==="comment")onComment(n,d.comment||d.content||"");
+}
+function connect(){
+  const id=parseId($("#live").value),key=$("#key").value.trim();
+  if(!id){st("Digite o @ ou o link da live");return}
+  try{localStorage.setItem("rl_live",$("#live").value);localStorage.setItem("rl_key",key)}catch(_){}
+  want=true;if(ws){ws.onclose=null;ws.close()}
+  st("Conectando a @"+id+"...");
+  try{ws=new WebSocket("wss://ws.eulerstream.com?uniqueId="+encodeURIComponent(id)+(key?"&apiKey="+encodeURIComponent(key):""))}
+  catch(_){st("Bloqueado aqui (abra o arquivo local)");return}
+  ws.onopen=()=>st("Conectado a @"+id+" - aguardando eventos");
+  ws.onerror=()=>st("Erro na conexão (a live está no ar? talvez precise de chave)");
+  ws.onclose=()=>{if(want){st("Reconectando a @"+id+"...");setTimeout(connect,4000)}};
+  ws.onmessage=e=>{
+    let d;try{d=JSON.parse(e.data)}catch(_){return}
+    (d.messages||[d]).forEach(handle);
+    st("@"+id+" - "+nEv+" eventos recebidos");
+  };
+}
+$("#go").onclick=connect;$("#live").onkeydown=e=>{if(e.key==="Enter")connect()};
+try{$("#live").value=localStorage.getItem("rl_live")||"";$("#key").value=localStorage.getItem("rl_key")||""}catch(_){}
+</script>
+</body>
+</html>
