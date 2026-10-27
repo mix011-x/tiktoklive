@@ -26,7 +26,7 @@ button:active{background:var(--ac);color:#fff}
 <canvas id="c"></canvas>
 <div id="panel">
   <div class="row"><input type="text" id="live" placeholder="@usuario ou link da live" aria-label="Usuário ou link da live"><button id="go">Conectar</button></div>
-  <div class="row"><input type="text" id="key" placeholder="Chave Euler Stream (opcional)" aria-label="Chave da API"></div>
+  <div class="row"><input type="text" id="key" placeholder="Chave da Euler Stream (cole aqui)" aria-label="Chave da API"></div>
   <div class="row"><input type="text" id="u" value="Viewer1" maxlength="16" aria-label="Nome do espectador"><span id="st">Modo teste</span><button id="hd">Ocultar</button></div>
   <div class="row" id="gifts"></div>
   <div class="row"><input type="text" id="m" placeholder="Comentário do chat" aria-label="Comentário"><button id="sm">Enviar</button></div>
@@ -218,7 +218,7 @@ setInterval(()=>{
 },2000);
 
 /* ligação com a live real: serviço Euler Stream (terceiros), por @usuario ou link */
-let ws,want=false,nEv=0;
+let ws,want=false,nEv=0,lastT="?";
 const st=t=>$("#st").textContent=t;
 const parseId=s=>{s=String(s).trim();const m=s.match(/@([A-Za-z0-9._]+)/);return (m?m[1]:s).replace(/[^A-Za-z0-9._]/g,"")};
 const streak={};
@@ -228,12 +228,13 @@ function gift(n,g,d,c){
   onGift(n,g,d,add);
 }
 function handle(m){
-  nEv++;
+  nEv++;lastT=String(m.type||m.event||m.method||"?");
   const t=String(m.type||m.event||m.method||"").toLowerCase(),d=m.data||m,u=d.user||m.user||{},
     n=u.nickname||u.uniqueId||d.nickname||d.uniqueId||"Viewer";
   if(t.includes("gift")){const g=d.gift||d;gift(n,g.name||g.giftName||"",g.diamondCount||g.diamond_count||1,d.repeatCount||g.repeatCount||1)}
   else if(t.includes("chat")||t==="comment")onComment(n,d.comment||d.content||"");
 }
+const WHY={4400:"opções inválidas",4401:"chave ausente ou inválida (gere a chave grátis no Euler Stream)",4403:"sem permissão com essa chave",4404:"esse @ não está ao vivo agora",4429:"conexões demais com essa chave",4005:"a live terminou",4006:"sem mensagens por muito tempo",4500:"o TikTok fechou a conexão",4555:"tempo máximo da conexão atingido",4556:"erro ao buscar a live",4557:"erro ao buscar dados da live"};
 function connect(){
   const id=parseId($("#live").value),key=$("#key").value.trim();
   if(!id){st("Digite o @ ou o link da live");return}
@@ -243,12 +244,16 @@ function connect(){
   try{ws=new WebSocket("wss://ws.eulerstream.com?uniqueId="+encodeURIComponent(id)+(key?"&apiKey="+encodeURIComponent(key):""))}
   catch(_){st("Bloqueado aqui (abra o arquivo local)");return}
   ws.onopen=()=>st("Conectado a @"+id+" - aguardando eventos");
-  ws.onerror=()=>st("Erro na conexão (a live está no ar? talvez precise de chave)");
-  ws.onclose=()=>{if(want){st("Reconectando a @"+id+"...");setTimeout(connect,4000)}};
+  ws.onclose=e=>{
+    const why=WHY[e.code];
+    if(why){want=false;st("Desconectado: "+why+" (código "+e.code+")");return}
+    if(want){st("Falha na conexão (código "+e.code+"). Falta a chave ou o @ está fora do ar? Tentando de novo...");setTimeout(()=>{if(want)connect()},5000)}
+  };
   ws.onmessage=e=>{
+    if(typeof e.data!=="string"){st("Recebendo dados binários, formato que este jogo ainda não lê");return}
     let d;try{d=JSON.parse(e.data)}catch(_){return}
     (d.messages||[d]).forEach(handle);
-    st("@"+id+" - "+nEv+" eventos recebidos");
+    st("@"+id+" - "+nEv+" eventos (último: "+lastT+")");
   };
 }
 $("#go").onclick=connect;$("#live").onkeydown=e=>{if(e.key==="Enter")connect()};
